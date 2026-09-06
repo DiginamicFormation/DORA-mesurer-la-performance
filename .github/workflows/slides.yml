@@ -1,22 +1,27 @@
 name: Slides
 
-# Génère slides.md en PDF et en PPTX avec Marp, et publie les deux fichiers
-# comme artefact du run.
+# Produit trois fichiers à partir des sources du dépôt :
+#   - dora-slides.pdf            les diapositives (Marp)
+#   - dora-slides.pptx           les mêmes, en PowerPoint (Marp)
+#   - dora-support-de-cours.pdf  le Readme.md mis en page (md-to-pdf)
+#
+# Sur un push vers main ou une pull request : les fichiers sont publiés comme
+# artefact du run, conservés 90 jours.
+# Sur un tag `v*` : ils sont en plus attachés à une release GitHub, en
+# téléchargement direct et permanent.
 #
 # Les actions sont épinglées sur une majeure. Pour un usage réellement en
 # production, épinglez-les sur un SHA de commit plutôt que sur un tag mouvant,
-# comme le recommande le chapitre 5.3 du support (« un tag peut être redéplacé
-# sans préavis »).
+# comme le recommande le chapitre 5.3 du support.
 
 on:
   push:
     branches: [main]
-    paths:
-      - slides.md
-      - .github/workflows/slides.yml
+    tags: ["v*"]
   pull_request:
     paths:
       - slides.md
+      - Readme.md
       - .github/workflows/slides.yml
   workflow_dispatch:
 
@@ -24,9 +29,11 @@ permissions:
   contents: read
 
 env:
-  # Version exacte de Marp CLI : le rendu doit être reproductible d'un run à
-  # l'autre. À bumper volontairement, pas à laisser flotter sur @latest.
+  # Versions exactes : le rendu doit être reproductible d'un run à l'autre.
+  # À bumper volontairement, pas à laisser flotter sur @latest.
   MARP_VERSION: 4.5.1
+  MD_TO_PDF_VERSION: 5.2.5
+  MERMAID_CLI_VERSION: 11.17.0
 
   # Le délai par défaut de Marp est de 30 s, insuffisant ici : les slides
   # chargent le logo et l'illustration depuis des URL distantes, et le rendu
@@ -36,7 +43,7 @@ env:
 
 jobs:
   build:
-    name: Générer PDF et PPTX
+    name: Générer les documents
     runs-on: ubuntu-latest
 
     steps:
@@ -48,46 +55,129 @@ jobs:
         with:
           node-version: 24
 
-      # Chrome est préinstallé sur les runners ubuntu-latest et Marp le détecte
-      # tout seul. Si la détection échoue un jour, décommenter :
-      #   env:
-      #     CHROME_PATH: /usr/bin/google-chrome
-      # Et si vous basculez ce job dans un conteneur tournant en root, il faudra
-      # en plus désactiver le bac à sable de Chrome.
-      - name: Générer le PDF
+      # Marp détecte Chrome tout seul, mais md-to-pdf et mermaid-cli attendent
+      # un Chrome installé par Puppeteer, absent du runner. On leur passe donc
+      # explicitement le binaire préinstallé, sans le télécharger.
+      - name: Localiser Chrome
         run: |
-          mkdir -p dist
+          CHROME="$(command -v google-chrome || command -v chromium-browser || command -v chromium || true)"
+          if [ -z "$CHROME" ]; then
+            echo "::error::Aucun navigateur Chromium trouvé sur le runner."
+            exit 1
+          fi
+          echo "Chrome trouvé : $CHROME ($("$CHROME" --version))"
+          echo "CHROME_BIN=$CHROME" >> "$GITHUB_ENV"
+
+      - name: Préparer les dossiers
+        run: mkdir -p dist build
+
+      # ---------------------------------------------------------------- slides
+
+      - name: Générer les diapositives en PDF
+        run: |
           npx --yes "@marp-team/marp-cli@${MARP_VERSION}" slides.md \
             --pdf \
             --pdf-outlines \
             --output dist/dora-slides.pdf
 
-      - name: Générer le PPTX
+      - name: Générer les diapositives en PPTX
         run: |
           npx --yes "@marp-team/marp-cli@${MARP_VERSION}" slides.md \
             --pptx \
             --output dist/dora-slides.pptx
 
-      # Marp sort en code 0 même quand il n'a rien écrit d'exploitable :
-      # on vérifie que les deux fichiers existent et ne sont pas vides.
+      # --------------------------------------------------------------- support
+
+      # Le Readme contient un diagramme mermaid. md-to-pdf le rendrait en bloc
+      # de code brut : mermaid-cli le remplace d'abord par un SVG, dans une
+      # COPIE du fichier. Readme.md n'est jamais modifié, pour que GitHub
+      # continue d'afficher le diagramme nativement.
+      - name: Rendre les diagrammes mermaid
+        run: |
+          export PUPPETEER_EXECUTABLE_PATH="$CHROME_BIN"
+          cp Readme.md build/
+          cd build
+          npx --yes "@mermaid-js/mermaid-cli@${MERMAID_CLI_VERSION}" \
+            --input Readme.md \
+            --output dora-support-de-cours.md
+
+      - name: Générer le support de cours en PDF
+        working-directory: build
+        run: |
+          npx --yes "md-to-pdf@${MD_TO_PDF_VERSION}" dora-support-de-cours.md \
+            --document-title "DORA - Mesurer la performance de livraison logicielle" \
+            --launch-options "{\"executablePath\":\"${CHROME_BIN}\"}" \
+            --pdf-options '{
+              "format": "A4",
+              "margin": {"top": "18mm", "bottom": "20mm", "left": "16mm", "right": "16mm"},
+              "printBackground": true,
+              "displayHeaderFooter": true,
+              "headerTemplate": "<div></div>",
+              "footerTemplate": "<div style=\"width:100%;font-size:8px;color:#888;padding:0 16mm;display:flex;justify-content:space-between\"><span>DORA - Mesurer la performance de livraison logicielle</span><span class=\"pageNumber\"></span></div>"
+            }'
+          mv dora-support-de-cours.pdf ../dist/
+
+      # ---------------------------------------------------------------- garde-fou
+
+      # Marp comme md-to-pdf sortent parfois en code 0 sans avoir écrit de
+      # fichier exploitable : on vérifie que les trois existent et sont pleins.
       - name: Vérifier les fichiers produits
         run: |
-          test -s dist/dora-slides.pdf  || { echo "::error::PDF absent ou vide";  exit 1; }
-          test -s dist/dora-slides.pptx || { echo "::error::PPTX absent ou vide"; exit 1; }
+          fail=0
+          for f in dist/dora-slides.pdf dist/dora-slides.pptx dist/dora-support-de-cours.pdf; do
+            if [ ! -s "$f" ]; then
+              echo "::error::$f absent ou vide"
+              fail=1
+            fi
+          done
+          [ "$fail" -eq 0 ] || exit 1
           ls -lh dist
           {
-            echo "### Slides générées"
+            echo "### Documents générés"
             echo ""
             echo "| Fichier | Taille |"
             echo "|---|---|"
-            echo "| dora-slides.pdf | $(du -h dist/dora-slides.pdf | cut -f1) |"
-            echo "| dora-slides.pptx | $(du -h dist/dora-slides.pptx | cut -f1) |"
+            for f in dist/*; do
+              echo "| $(basename "$f") | $(du -h "$f" | cut -f1) |"
+            done
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Publier l'artefact
         uses: actions/upload-artifact@v7
         with:
-          name: dora-slides
+          name: dora-documents
           path: dist/
           if-no-files-found: error
           retention-days: 90
+
+  release:
+    name: Publier la release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+
+    # Seul ce job a besoin d'écrire : le job de build reste en lecture seule.
+    permissions:
+      contents: write
+
+    steps:
+      # Pas de checkout : gh n'a pas besoin du dépôt en local, GH_REPO suffit.
+      - name: Récupérer les documents générés
+        uses: actions/download-artifact@v8
+        with:
+          name: dora-documents
+          path: dist
+
+      - name: Créer la release et y attacher les documents
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          ls -lh dist
+          gh release create "${GITHUB_REF_NAME}" \
+            dist/dora-slides.pdf \
+            dist/dora-slides.pptx \
+            dist/dora-support-de-cours.pdf \
+            --title "DORA ${GITHUB_REF_NAME}" \
+            --generate-notes \
+            --verify-tag
