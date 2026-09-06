@@ -5,10 +5,16 @@ name: Slides
 #   - dora-slides.pptx           les mêmes, en PowerPoint (Marp)
 #   - dora-support-de-cours.pdf  le Readme.md mis en page (md-to-pdf)
 #
-# Sur un push vers main ou une pull request : les fichiers sont publiés comme
-# artefact du run, conservés 90 jours.
-# Sur un tag `v*` : ils sont en plus attachés à une release GitHub, en
-# téléchargement direct et permanent.
+# Le workflow se déclenche uniquement sur un tag `v*` : les documents sont
+# produits pour une version identifiée, jamais à chaque commit. Ils sont
+# publiés comme artefact du run (90 jours) ET attachés à une release GitHub,
+# en téléchargement direct et permanent.
+#
+#   git tag v1.0 && git push origin v1.0
+#
+# `workflow_dispatch` reste ouvert pour un essai à blanc : il produit
+# l'artefact sans créer de release, ce qui permet de valider le rendu sans
+# consommer un numéro de version.
 #
 # Les actions sont épinglées sur une majeure. Pour un usage réellement en
 # production, épinglez-les sur un SHA de commit plutôt que sur un tag mouvant,
@@ -16,13 +22,7 @@ name: Slides
 
 on:
   push:
-    branches: [main]
     tags: ["v*"]
-  pull_request:
-    paths:
-      - slides.md
-      - Readme.md
-      - .github/workflows/slides.yml
   workflow_dispatch:
 
 permissions:
