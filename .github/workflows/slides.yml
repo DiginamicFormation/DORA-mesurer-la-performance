@@ -1,0 +1,93 @@
+name: Slides
+
+# Génère slides.md en PDF et en PPTX avec Marp, et publie les deux fichiers
+# comme artefact du run.
+#
+# Les actions sont épinglées sur une majeure. Pour un usage réellement en
+# production, épinglez-les sur un SHA de commit plutôt que sur un tag mouvant,
+# comme le recommande le chapitre 5.3 du support (« un tag peut être redéplacé
+# sans préavis »).
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - slides.md
+      - .github/workflows/slides.yml
+  pull_request:
+    paths:
+      - slides.md
+      - .github/workflows/slides.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  # Version exacte de Marp CLI : le rendu doit être reproductible d'un run à
+  # l'autre. À bumper volontairement, pas à laisser flotter sur @latest.
+  MARP_VERSION: 4.5.1
+
+  # Le délai par défaut de Marp est de 30 s, insuffisant ici : les slides
+  # chargent le logo et l'illustration depuis des URL distantes, et le rendu
+  # dépasse ce délai. Vérifié : à 30 s la conversion échoue sur
+  # « Timed out after waiting 30000ms ».
+  PUPPETEER_TIMEOUT: "180000"
+
+jobs:
+  build:
+    name: Générer PDF et PPTX
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Récupérer le dépôt
+        uses: actions/checkout@v7
+
+      - name: Installer Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      # Chrome est préinstallé sur les runners ubuntu-latest et Marp le détecte
+      # tout seul. Si la détection échoue un jour, décommenter :
+      #   env:
+      #     CHROME_PATH: /usr/bin/google-chrome
+      # Et si vous basculez ce job dans un conteneur tournant en root, il faudra
+      # en plus désactiver le bac à sable de Chrome.
+      - name: Générer le PDF
+        run: |
+          mkdir -p dist
+          npx --yes "@marp-team/marp-cli@${MARP_VERSION}" slides.md \
+            --pdf \
+            --pdf-outlines \
+            --output dist/dora-slides.pdf
+
+      - name: Générer le PPTX
+        run: |
+          npx --yes "@marp-team/marp-cli@${MARP_VERSION}" slides.md \
+            --pptx \
+            --output dist/dora-slides.pptx
+
+      # Marp sort en code 0 même quand il n'a rien écrit d'exploitable :
+      # on vérifie que les deux fichiers existent et ne sont pas vides.
+      - name: Vérifier les fichiers produits
+        run: |
+          test -s dist/dora-slides.pdf  || { echo "::error::PDF absent ou vide";  exit 1; }
+          test -s dist/dora-slides.pptx || { echo "::error::PPTX absent ou vide"; exit 1; }
+          ls -lh dist
+          {
+            echo "### Slides générées"
+            echo ""
+            echo "| Fichier | Taille |"
+            echo "|---|---|"
+            echo "| dora-slides.pdf | $(du -h dist/dora-slides.pdf | cut -f1) |"
+            echo "| dora-slides.pptx | $(du -h dist/dora-slides.pptx | cut -f1) |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Publier l'artefact
+        uses: actions/upload-artifact@v7
+        with:
+          name: dora-slides
+          path: dist/
+          if-no-files-found: error
+          retention-days: 90
