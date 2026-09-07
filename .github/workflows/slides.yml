@@ -1,8 +1,10 @@
 name: Slides
 
-# Produit trois fichiers à partir des sources du dépôt :
+# Produit cinq fichiers à partir des sources du dépôt :
 #   - dora-slides.pdf            les diapositives (Marp)
 #   - dora-slides.pptx           les mêmes, en PowerPoint (Marp)
+#   - dora-slides-white.pdf      les diapositives sans le style sombre (Marp)
+#   - dora-slides-white.pptx     les mêmes, en PowerPoint (Marp)
 #   - dora-support-de-cours.pdf  le Readme.md mis en page (md-to-pdf)
 #
 # Le workflow se déclenche uniquement sur un tag `v*` : les documents sont
@@ -86,6 +88,28 @@ jobs:
             --pptx \
             --output dist/dora-slides.pptx
 
+      - name: Préparer la version white
+        run: |
+          awk '
+            $0 == "style: |" { skip=1; next }
+            skip && $0 ~ /^  / { next }
+            skip { skip=0 }
+            { print }
+          ' slides.md > build/slides-white.md
+
+      - name: Générer les diapositives white en PDF
+        run: |
+          npx --yes "@marp-team/marp-cli@${MARP_VERSION}" build/slides-white.md \
+            --pdf \
+            --pdf-outlines \
+            --output dist/dora-slides-white.pdf
+
+      - name: Générer les diapositives white en PPTX
+        run: |
+          npx --yes "@marp-team/marp-cli@${MARP_VERSION}" build/slides-white.md \
+            --pptx \
+            --output dist/dora-slides-white.pptx
+
       # --------------------------------------------------------------- support
 
       # Le Readme contient un diagramme mermaid. md-to-pdf le rendrait en bloc
@@ -120,11 +144,11 @@ jobs:
       # ---------------------------------------------------------------- garde-fou
 
       # Marp comme md-to-pdf sortent parfois en code 0 sans avoir écrit de
-      # fichier exploitable : on vérifie que les trois existent et sont pleins.
+      # fichier exploitable : on vérifie que les cinq existent et sont pleins.
       - name: Vérifier les fichiers produits
         run: |
           fail=0
-          for f in dist/dora-slides.pdf dist/dora-slides.pptx dist/dora-support-de-cours.pdf; do
+          for f in dist/dora-slides.pdf dist/dora-slides.pptx dist/dora-slides-white.pdf dist/dora-slides-white.pptx dist/dora-support-de-cours.pdf; do
             if [ ! -s "$f" ]; then
               echo "::error::$f absent ou vide"
               fail=1
@@ -177,6 +201,8 @@ jobs:
           gh release create "${GITHUB_REF_NAME}" \
             dist/dora-slides.pdf \
             dist/dora-slides.pptx \
+            dist/dora-slides-white.pdf \
+            dist/dora-slides-white.pptx \
             dist/dora-support-de-cours.pdf \
             --title "DORA ${GITHUB_REF_NAME}" \
             --generate-notes \
