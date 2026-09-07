@@ -1,11 +1,11 @@
-name: Slides
+name: Documents
 
 # Produit cinq fichiers à partir des sources du dépôt :
-#   - dora-slides.pdf            les diapositives (Marp)
-#   - dora-slides.pptx           les mêmes, en PowerPoint (Marp)
-#   - dora-slides-white.pdf      les diapositives sans le style sombre (Marp)
-#   - dora-slides-white.pptx     les mêmes, en PowerPoint (Marp)
-#   - dora-support-de-cours.pdf  le Readme.md mis en page (md-to-pdf)
+#   - slides.pdf            les diapositives (Marp)
+#   - slides.pptx           les mêmes, en PowerPoint (Marp)
+#   - slides-white.pdf      les diapositives sans le style sombre (Marp)
+#   - slides-white.pptx     les mêmes, en PowerPoint (Marp)
+#   - support-de-cours.pdf  le Readme.md mis en page (md-to-pdf)
 #
 # Le workflow se déclenche uniquement sur un tag `v*` : les documents sont
 # produits pour une version identifiée, jamais à chaque commit. Ils sont
@@ -84,13 +84,13 @@ jobs:
           npx --yes "@marp-team/marp-cli@${MARP_VERSION}" slides.md \
             --pdf \
             --pdf-outlines \
-            --output dist/dora-slides.pdf
+            --output dist/slides.pdf
 
       - name: Générer les diapositives en PPTX
         run: |
           npx --yes "@marp-team/marp-cli@${MARP_VERSION}" slides.md \
             --pptx \
-            --output dist/dora-slides.pptx
+            --output dist/slides.pptx
 
       # Deux transformations : on retire le bloc `style:` (fond sombre), puis on
       # échange le logo du footer. Le PNG « -blk » est fait pour le fond sombre ;
@@ -112,13 +112,13 @@ jobs:
           npx --yes "@marp-team/marp-cli@${MARP_VERSION}" build/slides-white.md \
             --pdf \
             --pdf-outlines \
-            --output dist/dora-slides-white.pdf
+            --output dist/slides-white.pdf
 
       - name: Générer les diapositives white en PPTX
         run: |
           npx --yes "@marp-team/marp-cli@${MARP_VERSION}" build/slides-white.md \
             --pptx \
-            --output dist/dora-slides-white.pptx
+            --output dist/slides-white.pptx
 
       # --------------------------------------------------------------- support
 
@@ -133,7 +133,7 @@ jobs:
           cd build
           npx --yes "@mermaid-js/mermaid-cli@${MERMAID_CLI_VERSION}" \
             --input Readme.md \
-            --output dora-support-de-cours.md
+            --output support-de-cours.md
 
       # Le PDF circule seul, détaché du dépôt : sans cette mention, le lecteur
       # n'a aucun moyen de remonter à la source ni de vérifier s'il tient une
@@ -142,7 +142,7 @@ jobs:
         working-directory: build
         run: |
           REPO_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}"
-          cat >> dora-support-de-cours.md <<SOURCE
+          cat >> support-de-cours.md <<SOURCE
 
           ## Source
 
@@ -152,7 +152,7 @@ jobs:
 
           Version : \`${GITHUB_REF_NAME}\`
           SOURCE
-          tail -12 dora-support-de-cours.md
+          tail -12 support-de-cours.md
 
       # L'en-tête porte le logo. Chrome rend les templates d'en-tête et de pied
       # dans un contexte isolé, sans accès réseau : une URL distante y resterait
@@ -178,11 +178,11 @@ jobs:
           }
           PDFOPTS
 
-          npx --yes "md-to-pdf@${MD_TO_PDF_VERSION}" dora-support-de-cours.md \
+          npx --yes "md-to-pdf@${MD_TO_PDF_VERSION}" support-de-cours.md \
             --document-title "DORA - Mesurer la performance de livraison logicielle" \
             --launch-options "{\"executablePath\":\"${CHROME_BIN}\"}" \
             --pdf-options "$(cat pdf-options.json)"
-          mv dora-support-de-cours.pdf ../dist/
+          mv support-de-cours.pdf ../dist/
 
       # ---------------------------------------------------------------- garde-fou
 
@@ -191,7 +191,7 @@ jobs:
       - name: Vérifier les fichiers produits
         run: |
           fail=0
-          for f in dist/dora-slides.pdf dist/dora-slides.pptx dist/dora-slides-white.pdf dist/dora-slides-white.pptx dist/dora-support-de-cours.pdf; do
+          for f in dist/slides.pdf dist/slides.pptx dist/slides-white.pdf dist/slides-white.pptx dist/support-de-cours.pdf; do
             if [ ! -s "$f" ]; then
               echo "::error::$f absent ou vide"
               fail=1
@@ -212,7 +212,7 @@ jobs:
       - name: Publier l'artefact
         uses: actions/upload-artifact@v7
         with:
-          name: dora-documents
+          name: documents
           path: dist/
           if-no-files-found: error
           retention-days: 90
@@ -232,7 +232,7 @@ jobs:
       - name: Récupérer les documents générés
         uses: actions/download-artifact@v8
         with:
-          name: dora-documents
+          name: documents
           path: dist
 
       - name: Créer la release et y attacher les documents
@@ -242,11 +242,11 @@ jobs:
         run: |
           ls -lh dist
           gh release create "${GITHUB_REF_NAME}" \
-            dist/dora-slides.pdf \
-            dist/dora-slides.pptx \
-            dist/dora-slides-white.pdf \
-            dist/dora-slides-white.pptx \
-            dist/dora-support-de-cours.pdf \
+            dist/slides.pdf \
+            dist/slides.pptx \
+            dist/slides-white.pdf \
+            dist/slides-white.pptx \
+            dist/support-de-cours.pdf \
             --title "DORA ${GITHUB_REF_NAME}" \
             --generate-notes \
             --verify-tag
