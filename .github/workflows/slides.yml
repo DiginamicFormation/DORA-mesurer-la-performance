@@ -37,6 +37,10 @@ env:
   MD_TO_PDF_VERSION: 5.2.5
   MERMAID_CLI_VERSION: 11.17.0
 
+  # Logo inliné dans l'en-tête du support de cours. Récupéré au build plutôt
+  # que versionné : une seule source de vérité, le dépôt PublicAssets.
+  LOGO_URL: https://raw.githubusercontent.com/DiginamicInternal/PublicAssets/refs/heads/main/Logo-diginamic-color.svg
+
   # Le délai par défaut de Marp est de 30 s, insuffisant ici : les slides
   # chargent le logo et l'illustration depuis des URL distantes, et le rendu
   # dépasse ce délai. Vérifié : à 30 s la conversion échoue sur
@@ -131,20 +135,34 @@ jobs:
             --input Readme.md \
             --output dora-support-de-cours.md
 
+      # L'en-tête porte le logo. Chrome rend les templates d'en-tête et de pied
+      # dans un contexte isolé, sans accès réseau : une URL distante y resterait
+      # vide. Le SVG est donc récupéré ici et inliné en data URI. La marge haute
+      # passe de 18 à 24 mm pour lui laisser la place.
       - name: Générer le support de cours en PDF
         working-directory: build
         run: |
+          LOGO_B64="$(curl -fsSL "$LOGO_URL" | base64 -w0)"
+          if [ -z "$LOGO_B64" ]; then
+            echo "::error::Logo vide ou introuvable : $LOGO_URL"
+            exit 1
+          fi
+
+          cat > pdf-options.json <<PDFOPTS
+          {
+            "format": "A4",
+            "margin": {"top": "24mm", "bottom": "20mm", "left": "16mm", "right": "16mm"},
+            "printBackground": true,
+            "displayHeaderFooter": true,
+            "headerTemplate": "<div style=\"width:100%;padding:8mm 16mm 0;text-align:right\"><img src=\"data:image/svg+xml;base64,${LOGO_B64}\" style=\"height:8mm\"></div>",
+            "footerTemplate": "<div style=\"width:100%;font-size:8px;color:#888;padding:0 16mm;display:flex;justify-content:space-between\"><span>DORA - Mesurer la performance de livraison logicielle</span><span class=\"pageNumber\"></span></div>"
+          }
+          PDFOPTS
+
           npx --yes "md-to-pdf@${MD_TO_PDF_VERSION}" dora-support-de-cours.md \
             --document-title "DORA - Mesurer la performance de livraison logicielle" \
             --launch-options "{\"executablePath\":\"${CHROME_BIN}\"}" \
-            --pdf-options '{
-              "format": "A4",
-              "margin": {"top": "18mm", "bottom": "20mm", "left": "16mm", "right": "16mm"},
-              "printBackground": true,
-              "displayHeaderFooter": true,
-              "headerTemplate": "<div></div>",
-              "footerTemplate": "<div style=\"width:100%;font-size:8px;color:#888;padding:0 16mm;display:flex;justify-content:space-between\"><span>DORA - Mesurer la performance de livraison logicielle</span><span class=\"pageNumber\"></span></div>"
-            }'
+            --pdf-options "$(cat pdf-options.json)"
           mv dora-support-de-cours.pdf ../dist/
 
       # ---------------------------------------------------------------- garde-fou
