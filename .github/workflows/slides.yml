@@ -135,6 +135,25 @@ jobs:
             --input Readme.md \
             --output dora-support-de-cours.md
 
+      # Le PDF circule seul, détaché du dépôt : sans cette mention, le lecteur
+      # n'a aucun moyen de remonter à la source ni de vérifier s'il tient une
+      # version à jour. On l'ajoute à la COPIE de travail, jamais au Readme.
+      - name: Ajouter l'URL du dépôt source en fin de document
+        working-directory: build
+        run: |
+          REPO_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}"
+          cat >> dora-support-de-cours.md <<SOURCE
+
+          ## Source
+
+          Ce document est généré à partir du \`Readme.md\` du dépôt :
+
+          [${REPO_URL}](${REPO_URL})
+
+          Version : \`${GITHUB_REF_NAME}\`
+          SOURCE
+          tail -12 dora-support-de-cours.md
+
       # L'en-tête porte le logo. Chrome rend les templates d'en-tête et de pied
       # dans un contexte isolé, sans accès réseau : une URL distante y resterait
       # vide. Le SVG est donc récupéré ici et inliné en data URI. La marge haute
