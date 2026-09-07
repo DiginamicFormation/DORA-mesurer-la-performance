@@ -88,6 +88,9 @@ jobs:
             --pptx \
             --output dist/dora-slides.pptx
 
+      # Deux transformations : on retire le bloc `style:` (fond sombre), puis on
+      # échange le logo du footer. Le PNG « -blk » est fait pour le fond sombre ;
+      # sur fond blanc, c'est le SVG couleur qu'il faut.
       - name: Préparer la version white
         run: |
           awk '
@@ -95,7 +98,10 @@ jobs:
             skip && $0 ~ /^  / { next }
             skip { skip=0 }
             { print }
-          ' slides.md > build/slides-white.md
+          ' slides.md \
+          | sed 's|Logo-diginamic-color-blk\.png|Logo-diginamic-color.svg|g' \
+          > build/slides-white.md
+          grep -n Logo-diginamic build/slides-white.md
 
       - name: Générer les diapositives white en PDF
         run: |
