@@ -1,6 +1,4 @@
-# DORA 
-
-Pas cette Dora là :
+# DORA : Mesurer la performance de livraison logicielle
 
 ![pas Cette dora](https://upload.wikimedia.org/wikipedia/fr/thumb/5/54/Dora_logo_licence.png/250px-Dora_logo_licence.png?utm_source=fr.wikipedia.org&utm_campaign=parser&utm_content=thumbnail)
 
